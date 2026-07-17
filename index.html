@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ตารางเวลา 4 ผลัด (ระบบเต็มรูปแบบ)</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="top-bar">
+        <button id="theme-toggle">🌓 เปลี่ยนโหมด</button>
+        <button id="settings-toggle">⚙️ ตั้งค่า</button>
+    </div>
+
+    <h2>หน้าปัดแสดงเวลา (3 รอบ)</h2>
+    
+    <div id="clock-container">
+        <svg id="clock-svg" viewBox="0 0 540 540"></svg>
+        <div id="tooltip"></div>
+    </div>
+    
+    <div class="digital-clock" id="digital-clock">00:00:00</div>
+    
+    <div class="legend-container">
+        <div class="legend" id="legend-box">
+            <!-- สร้างผ่าน JS -->
+        </div>
+
+        <div class="status-legend">
+            <strong>วงรอบแต่ละชั้น (จากในไปนอก):</strong><br>
+            • วงในสุด: <strong>รอบที่ 1</strong> | • วงกลาง: <strong>รอบที่ 2</strong> | • วงนอกสุด: <strong>รอบที่ 3</strong>
+            <br><br>
+            <strong>สัญลักษณ์ประเภทเวร:</strong><br>
+            <span style="display:inline-block; width:14px; height:14px; background:var(--text-color); opacity:0.5; margin:0 5px; vertical-align:middle; border-radius:2px;"></span> นั่งหนุน (สีจาง)<br>
+            <span style="display:inline-block; width:14px; height:14px; background:var(--text-color); opacity:1.0; margin:0 5px; vertical-align:middle; border-radius:2px;"></span> เข้าจุด (สีทึบ)
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal">
+        <div class="modal-content">
+            <button class="close-btn" id="close-modal">&times;</button>
+            <h3 style="margin-top: 0;">ตั้งค่าสีประจำผลัด</h3>
+            
+            <div class="setting-row">
+                <span>ผลัด 1</span>
+                <input type="color" id="color-p1">
+            </div>
+            <div class="setting-row">
+                <span>ผลัด 2</span>
+                <input type="color" id="color-p2">
+            </div>
+            <div class="setting-row">
+                <span>ผลัด 3</span>
+                <input type="color" id="color-p3">
+            </div>
+            <div class="setting-row">
+                <span>ผลัด 4</span>
+                <input type="color" id="color-p4">
+            </div>
+            <button class="save-btn" id="save-settings">บันทึก</button>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
