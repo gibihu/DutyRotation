@@ -14,7 +14,7 @@ const defaultColors = {
 
 let shiftColors = JSON.parse(localStorage.getItem('shiftColors')) || defaultColors;
 
-// ข้อมูลตามที่ผู้ใช้กำหนด
+// ข้อมูลวงรอบเวลาตามที่กำหนด
 const periodsData = [
     {
         label: "รอบที่ 1",
@@ -62,7 +62,7 @@ const centerX = 270;
 const centerY = 270;
 
 let activeTooltipPath = null;
-let focusedShift = null; // สถานะการ Focus ผลัด
+let focusedShift = null; 
 
 // 2. ฟังก์ชันคณิตศาสตร์และการวาด
 function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
@@ -119,7 +119,7 @@ function renderClock() {
         svg.appendChild(ref);
     });
 
-    // วาดส่วนโค้งเวลา
+    // วาดส่วนโค้งเวลา (Path)
     periodsData.forEach(period => {
         period.shifts.forEach(shift => {
             let startAngle = timeToAngle(shift.start);
@@ -142,11 +142,13 @@ function renderClock() {
             path.setAttribute("stroke-linecap", "butt");
             path.setAttribute("class", "shift-path");
             
-            // เก็บข้อมูลไว้สำหรับการทำ Focus
             path.setAttribute("data-shift", shift.name);
             path.setAttribute("data-type", shift.type);
+            
+            // เก็บเวลาเริ่มและจบไว้ใช้ในฟังก์ชันค้นหาเวลาปัจจุบันด้วย
+            path.setAttribute("data-start", shift.start);
+            path.setAttribute("data-end", shift.end);
 
-            // จัดการ Event สำหรับ Tooltip
             const content = `${period.label}<br>${shift.start}-${shift.end}`;
             
             const handleShowTooltip = (e) => {
@@ -168,24 +170,18 @@ function renderClock() {
             };
 
             path.addEventListener('click', handleShowTooltip);
-            
             path.addEventListener('mouseenter', (e) => {
-                if(window.matchMedia("(pointer: fine)").matches) {
-                    handleShowTooltip(e);
-                }
+                if(window.matchMedia("(pointer: fine)").matches) handleShowTooltip(e);
             });
-            
             path.addEventListener('mouseleave', () => {
-                if(window.matchMedia("(pointer: fine)").matches) {
-                    tooltip.style.opacity = '0';
-                }
+                if(window.matchMedia("(pointer: fine)").matches) tooltip.style.opacity = '0';
             });
 
             svg.appendChild(path);
         });
     });
 
-    // วาดขีดชี้บอกเวลา
+    // วาดขีดชี้บอกเวลา 60 นาที
     for (let m = 0; m < 60; m++) {
         let angle = m * 6;
         let isHour = m % 5 === 0;
@@ -232,10 +228,7 @@ function renderClock() {
         line.setAttribute("stroke", color);
         line.setAttribute("stroke-width", width);
         line.setAttribute("stroke-linecap", "round");
-        
-        if(id === 'sec-hand'){
-            line.setAttribute("filter", "drop-shadow(0 0 2px rgba(0,0,0,0.5))");
-        }
+        if(id === 'sec-hand') line.setAttribute("filter", "drop-shadow(0 0 2px rgba(0,0,0,0.5))");
         svg.appendChild(line);
         return line;
     };
@@ -254,17 +247,34 @@ function renderClock() {
     svg.appendChild(centerDot);
 
     renderLegend();
-    updateFocusUI(); // อัปเดตสถานะ Focus ล่าสุด
+    updateFocusUI(); 
 }
 
-// Render กล่องสีด้านล่าง (Legend) และระบบ Focus
+// 4. Render กล่องสีด้านล่าง (Legend V2.0)
 function renderLegend() {
     const legendBox = document.getElementById('legend-box');
     legendBox.innerHTML = '';
     
+    // 4.1 ปุ่ม "รอบปัจจุบัน"
+    let currentBtn = document.createElement('div');
+    currentBtn.className = 'legend-item';
+    currentBtn.id = 'current-mode-btn';
+    currentBtn.style.border = '1px solid var(--text-color)';
+    currentBtn.innerHTML = `<span>📍 รอบปัจจุบัน</span>`;
+    
+    currentBtn.addEventListener('click', () => {
+        if (focusedShift === "CURRENT_MODE") {
+            focusedShift = null; // ยกเลิกการโฟกัสถ้าระบบกดซ้ำ
+            updateFocusUI();
+        } else {
+            focusCurrentShift();
+        }
+    });
+    legendBox.appendChild(currentBtn);
+    
+    // 4.2 ปุ่มผลัดปกติ
     for(let i=1; i<=4; i++) {
         let name = `ผลัด ${i}`;
-        
         let item = document.createElement('div');
         item.className = 'legend-item';
         item.innerHTML = `
@@ -272,14 +282,8 @@ function renderLegend() {
             <span>${name}</span>
         `;
         
-        // เมื่อคลิกที่ปุ่ม Legend
         item.addEventListener('click', () => {
-            // ถัาคลิกซ้ำผลัดเดิม ให้ยกเลิก Focus
-            if (focusedShift === name) {
-                focusedShift = null; 
-            } else {
-                focusedShift = name; // กำหนดผลัดที่ถูก Focus
-            }
+            focusedShift = (focusedShift === name) ? null : name;
             updateFocusUI();
         });
         
@@ -287,12 +291,89 @@ function renderLegend() {
     }
 }
 
-// ฟังก์ชันจัดการการแสดงผลเวลา Focus ผลัด
-function updateFocusUI() {
-    // 1. จัดการ UI ของปุ่ม Legend
+// 5. ฟังก์ชันคำนวณและโฟกัสรอบปัจจุบัน (แก้บั๊กไฮไลต์วงอื่น)
+function focusCurrentShift() {
+    const now = new Date();
+    const bkkHours = now.getHours();
+    const bkkMinutes = now.getMinutes();
+    const currentTimeVal = bkkHours + (bkkMinutes / 100); 
+
+    let activeShifts = [];
+
+    // หาผลัดที่ Active ในเวลาปัจจุบันเป๊ะๆ
+    periodsData.forEach(period => {
+        period.shifts.forEach(shift => {
+            let start = parseFloat(shift.start);
+            let end = parseFloat(shift.end);
+            
+            if (start > end) { // กรณีข้ามวัน
+                if (currentTimeVal >= start || currentTimeVal < end) activeShifts.push(shift);
+            } else {
+                if (currentTimeVal >= start && currentTimeVal < end) activeShifts.push(shift);
+            }
+        });
+    });
+
+    focusedShift = "CURRENT_MODE"; 
+    
+    // อัปเดต UI ของปุ่ม Legend
     const legendItems = document.querySelectorAll('.legend-item');
     legendItems.forEach(item => {
+        if (item.id === 'current-mode-btn') {
+            item.style.opacity = '1';
+            item.style.transform = 'scale(1.05)';
+            item.style.backgroundColor = 'var(--panel-border)';
+        } else {
+            item.style.opacity = '0.3';
+            item.style.transform = 'scale(0.95)';
+            item.style.backgroundColor = 'transparent';
+        }
+    });
+
+    // อัปเดต Path บนหน้าปัด
+    const paths = document.querySelectorAll('.shift-path');
+    paths.forEach(path => {
+        const shiftName = path.getAttribute('data-shift');
+        const shiftType = path.getAttribute('data-type');
+        const shiftStart = path.getAttribute('data-start'); // ดึงเวลาเริ่มของเส้นนี้
+        const shiftEnd = path.getAttribute('data-end');     // ดึงเวลาจบของเส้นนี้
+        
+        // เช็คให้ตรงทั้ง ชื่อ, ประเภท, เวลาเริ่ม และเวลาจบ (ล็อคเฉพาะเส้นของรอบนั้นจริงๆ)
+        const isMatch = activeShifts.some(s => 
+            s.name === shiftName && 
+            s.type === shiftType &&
+            s.start === shiftStart && 
+            s.end === shiftEnd
+        );
+        
+        if (isMatch) {
+            let baseOpacity = (shiftType === 'x') ? "0.5" : "1.0";
+            path.setAttribute("stroke-opacity", baseOpacity);
+            path.style.filter = `drop-shadow(0 0 8px ${shiftColors[shiftName]})`;
+        } else {
+            path.setAttribute("stroke-opacity", "0.05");
+            path.style.filter = 'grayscale(100%)';
+        }
+    });
+}
+
+
+// 6. ฟังก์ชันจัดการการแสดงผลเวลา Focus แบบกดเลือกผลัดปกติ
+function updateFocusUI() {
+    if (focusedShift === "CURRENT_MODE") return; // ข้ามฟังก์ชันนี้ถ้ากำลังเปิดโหมดปัจจุบันอยู่
+
+    const legendItems = document.querySelectorAll('.legend-item');
+    legendItems.forEach(item => {
+        if (item.id === 'current-mode-btn') {
+            item.style.opacity = '0.7';
+            item.style.transform = 'scale(1)';
+            item.style.backgroundColor = 'transparent';
+            return;
+        }
+
         const shiftName = item.querySelector('span').textContent.trim();
+        item.style.backgroundColor = 'transparent';
+
         if (focusedShift === null) {
             item.style.opacity = '1';
             item.style.transform = 'scale(1)';
@@ -305,40 +386,31 @@ function updateFocusUI() {
         }
     });
 
-    // 2. จัดการเส้นผลัด (Path) ในนาฬิกา
     const paths = document.querySelectorAll('.shift-path');
     paths.forEach(path => {
         const shiftName = path.getAttribute('data-shift');
         const shiftType = path.getAttribute('data-type');
-        
-        // ค่า Opacity พื้นฐาน (นั่งหนุนจางกว่าเข้าจุด)
         let baseOpacity = (shiftType === 'x') ? "0.5" : "1.0";
         
         if (focusedShift === null) {
-            // ไม่มี Focus กลับสู่สภาพเดิม
             path.setAttribute("stroke-opacity", baseOpacity);
             path.style.filter = 'none';
         } else if (shiftName === focusedShift) {
-            // ผลัดที่ถูก Focus โชว์สีปกติ (หรือใส่ Glow สว่างขึ้นนิดหน่อยได้)
             path.setAttribute("stroke-opacity", baseOpacity);
             path.style.filter = `drop-shadow(0 0 5px ${shiftColors[shiftName]})`;
         } else {
-            // ผลัดที่ไม่ถูก Focus ให้จางลงและลดสี (Grayscale)
             path.setAttribute("stroke-opacity", "0.08");
             path.style.filter = 'grayscale(100%)';
         }
     });
 }
 
-// 4. อัปเดตเวลาเข็มทิศ (ตามเวลาโลก UTC+7)
+// 7. อัปเดตเวลาเข็มทิศ (แบบ Real-time)
 function updateRealTime() {
     const now = new Date();
-    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-    const bkkTime = new Date(utc + (3600000 * 7));
-
-    const h = bkkTime.getHours();
-    const m = bkkTime.getMinutes();
-    const s = bkkTime.getSeconds();
+    const h = now.getHours();
+    const m = now.getMinutes();
+    const s = now.getSeconds();
 
     const hAngle = (h % 12 + m / 60) * 30;
     const mAngle = (m + s / 60) * 6;
@@ -358,9 +430,8 @@ function updateRealTime() {
         `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
-// 5. จัดการอีเวนต์ต่าง ๆ (Events)
+// 8. จัดการอีเวนต์พื้นฐาน
 
-// คลิกพื้นที่ว่างปิด Tooltip
 document.addEventListener('click', (e) => {
     if(!e.target.classList.contains('shift-path')) {
         tooltip.style.opacity = '0';
@@ -368,7 +439,6 @@ document.addEventListener('click', (e) => {
     }
 });
 
-// Theme Toggle
 document.getElementById('theme-toggle').addEventListener('click', () => {
     document.body.classList.toggle('light-mode');
     if (document.body.classList.contains('light-mode')) {
@@ -378,7 +448,6 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
     }
 });
 
-// Settings Modal
 const modal = document.getElementById('settings-modal');
 document.getElementById('settings-toggle').addEventListener('click', () => {
     document.getElementById('color-p1').value = shiftColors["ผลัด 1"];
@@ -402,10 +471,9 @@ document.getElementById('save-settings').addEventListener('click', () => {
     
     modal.classList.remove('active');
     renderClock(); 
-    updateRealTime(); 
 });
 
-// รันครั้งแรก
+// เริ่มต้นระบบ
 renderClock();
 updateRealTime();
 setInterval(updateRealTime, 1000);
