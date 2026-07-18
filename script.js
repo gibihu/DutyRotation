@@ -291,7 +291,7 @@ function renderLegend() {
     }
 }
 
-// 5. ฟังก์ชันคำนวณและโฟกัสรอบปัจจุบัน (แก้บั๊กไฮไลต์วงอื่น)
+// 5. ฟังก์ชันคำนวณและโฟกัสรอบปัจจุบัน + รอบที่จะถึง
 function focusCurrentShift() {
     const now = new Date();
     const bkkHours = now.getHours();
@@ -299,17 +299,35 @@ function focusCurrentShift() {
     const currentTimeVal = bkkHours + (bkkMinutes / 100); 
 
     let activeShifts = [];
+    let nextStartTimes = new Set(); // ใช้ Set เก็บเวลาจบของผลัดปัจจุบัน เพื่อเอาไปหาผลัดถัดไป
 
-    // หาผลัดที่ Active ในเวลาปัจจุบันเป๊ะๆ
+    // 1. หาผลัดที่ Active ในเวลาปัจจุบัน
     periodsData.forEach(period => {
         period.shifts.forEach(shift => {
             let start = parseFloat(shift.start);
             let end = parseFloat(shift.end);
             
+            let isActive = false;
             if (start > end) { // กรณีข้ามวัน
-                if (currentTimeVal >= start || currentTimeVal < end) activeShifts.push(shift);
+                if (currentTimeVal >= start || currentTimeVal < end) isActive = true;
             } else {
-                if (currentTimeVal >= start && currentTimeVal < end) activeShifts.push(shift);
+                if (currentTimeVal >= start && currentTimeVal < end) isActive = true;
+            }
+
+            if (isActive) {
+                activeShifts.push(shift);
+                nextStartTimes.add(shift.end); // เก็บเวลาจบของเวรนี้เอาไว้เป็นเป้าหมาย
+            }
+        });
+    });
+
+    // 2. หาผลัดถัดไป (Upcoming) ที่กำลังจะถึง
+    let upcomingShifts = [];
+    periodsData.forEach(period => {
+        period.shifts.forEach(shift => {
+            // ถ้าเวลาเริ่มของผลัดนี้ ตรงกับเวลาจบของผลัดปัจจุบัน แปลว่าเป็นรอบถัดไปทันที
+            if (nextStartTimes.has(shift.start)) {
+                upcomingShifts.push(shift);
             }
         });
     });
@@ -335,27 +353,31 @@ function focusCurrentShift() {
     paths.forEach(path => {
         const shiftName = path.getAttribute('data-shift');
         const shiftType = path.getAttribute('data-type');
-        const shiftStart = path.getAttribute('data-start'); // ดึงเวลาเริ่มของเส้นนี้
-        const shiftEnd = path.getAttribute('data-end');     // ดึงเวลาจบของเส้นนี้
+        const shiftStart = path.getAttribute('data-start');
+        const shiftEnd = path.getAttribute('data-end');
         
-        // เช็คให้ตรงทั้ง ชื่อ, ประเภท, เวลาเริ่ม และเวลาจบ (ล็อคเฉพาะเส้นของรอบนั้นจริงๆ)
-        const isMatch = activeShifts.some(s => 
-            s.name === shiftName && 
-            s.type === shiftType &&
-            s.start === shiftStart && 
-            s.end === shiftEnd
-        );
+        // ตรวจสอบว่าเส้นนี้คือเวรปัจจุบัน หรือเวรที่จะถึง
+        const isMatchActive = activeShifts.some(s => s.name === shiftName && s.type === shiftType && s.start === shiftStart && s.end === shiftEnd);
+        const isMatchUpcoming = upcomingShifts.some(s => s.name === shiftName && s.type === shiftType && s.start === shiftStart && s.end === shiftEnd);
         
-        if (isMatch) {
-            let baseOpacity = (shiftType === 'x') ? "0.5" : "1.0";
+        if (isMatchActive) {
+            // เวรปัจจุบัน: สว่างชัดเจน + แสง Glow เข้ม
+            let baseOpacity = (shiftType === 'x') ? "0.6" : "1.0";
             path.setAttribute("stroke-opacity", baseOpacity);
             path.style.filter = `drop-shadow(0 0 8px ${shiftColors[shiftName]})`;
+        } else if (isMatchUpcoming) {
+            // เวรที่จะถึง: สว่างรองลงมา + แสง Glow อ่อนๆ (ดูรู้ว่าเตรียมตัว)
+            let baseOpacity = (shiftType === 'x') ? "0.3" : "0.7";
+            path.setAttribute("stroke-opacity", baseOpacity);
+            path.style.filter = `drop-shadow(0 0 3px ${shiftColors[shiftName]})`;
         } else {
+            // ไม่เกี่ยวข้อง: จางลงและเป็นสีเทา
             path.setAttribute("stroke-opacity", "0.05");
             path.style.filter = 'grayscale(100%)';
         }
     });
 }
+
 
 
 // 6. ฟังก์ชันจัดการการแสดงผลเวลา Focus แบบกดเลือกผลัดปกติ
